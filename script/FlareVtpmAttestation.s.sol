@@ -16,7 +16,7 @@ contract FlareVtpmAttestationScript is Script {
     FlareVtpmAttestation flareVtpm;
     OidcSignatureVerification oidcVerifier;
 
-    function deploy() public {
+    function run() public {
         // Starting the broadcast of transactions from the deployer account
         vm.startBroadcast(deployerPrivateKey);
 

@@ -140,4 +140,54 @@ library ParserUtils {
         }
         return type(uint256).max;
     }
+
+    /**
+     * @dev Extracts an array of string values associated with a specified key in the JSON-like data.
+     * Assumes the array is enclosed in square brackets and values are separated by commas.
+     * @param data The byte array containing the JSON-like data.
+     * @param key The key to locate the desired array of string values.
+     * @return result The extracted array of string values as an array of bytes arrays.
+     */
+    function extractStringArray(bytes calldata data, string memory key) internal pure returns (bytes[] memory result) {
+        bytes memory keyBytes = bytes(key);
+        uint256 start = indexOf(data, keyBytes);
+        if (start == type(uint256).max) {
+            return new bytes[](0); // Key not found
+        }
+        start += keyBytes.length;
+
+        // Find the start and end of the array
+        uint256 arrayStart = indexOf(data[start:], bytes("[")) + start + 1;
+        uint256 arrayEnd = indexOf(data[arrayStart:], bytes("]")) + arrayStart;
+
+        // Extract the array content
+        bytes memory arrayContent = data[arrayStart:arrayEnd];
+
+        // Split the array content by commas
+        uint256 count = 1;
+        for (uint256 i = 0; i < arrayContent.length; i++) {
+            if (arrayContent[i] == ",") {
+                count++;
+            }
+        }
+
+        result = new bytes[](count);
+        uint256 index = 0;
+        uint256 lastPos = 0;
+        for (uint256 i = 0; i < arrayContent.length; i++) {
+            if (arrayContent[i] == "," || i == arrayContent.length - 1) {
+                uint256 length = i - lastPos;
+                if (i == arrayContent.length - 1) {
+                    length++;
+                }
+                bytes memory slice = new bytes(length);
+                for (uint256 j = 0; j < length; j++) {
+                    slice[j] = arrayContent[lastPos + j];
+                }
+                result[index] = slice;
+                lastPos = i + 1;
+                index++;
+            }
+        }
+    }
 }

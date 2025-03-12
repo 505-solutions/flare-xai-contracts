@@ -8,6 +8,8 @@ import {InvalidVerifier, PayloadValidationFailed, SignatureVerificationFailed} f
 import {ParserUtils} from "./utils/ParserUtils.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
+import {console} from "forge-std/console.sol";
+
 /**
  * @title FlareVtpmAttestation
  * @dev A contract for verifying RSA-signed JWTs and registering virtual Trusted Platform Module (vTPM) attestations.
@@ -111,7 +113,14 @@ contract FlareVtpmAttestation is IAttestation, Ownable {
         }
 
         // Parse the JWT payload to obtain the vTPM configuration
-        QuoteConfig memory payloadConfig = parsePayload(payload);
+        (QuoteConfig memory payloadConfig, bytes[] memory eatNonceArray) = parsePayload(payload);
+
+        // console.log("eatNonceArray");
+        // console.logBytes(eatNonceArray[0]);
+        // console.logBytes(eatNonceArray[1]);
+        // console.logBytes(eatNonceArray[2]);
+        // console.logBytes(eatNonceArray[3]);
+        // console.logBytes(eatNonceArray[4]);
 
         // Validate the configuration in the payload
         validatePayload(payloadConfig);
@@ -148,7 +157,11 @@ contract FlareVtpmAttestation is IAttestation, Ownable {
      * @param rawPayload Base64URL-decoded byte array representing the JWT payload.
      * @return config A `QuoteConfig` struct with the parsed vTPM configuration values.
      */
-    function parsePayload(bytes calldata rawPayload) internal pure returns (QuoteConfig memory config) {
+    function parsePayload(bytes calldata rawPayload)
+        internal
+        pure
+        returns (QuoteConfig memory config, bytes[] memory eatNonceArray)
+    {
         // Extract each field from the payload JSON
         config.exp = ParserUtils.extractUintValue(rawPayload, '"exp":');
         config.iat = ParserUtils.extractUintValue(rawPayload, '"iat":');
@@ -157,6 +170,12 @@ contract FlareVtpmAttestation is IAttestation, Ownable {
         config.base.hwmodel = ParserUtils.extractStringValue(rawPayload, '"hwmodel":"');
         config.base.swname = ParserUtils.extractStringValue(rawPayload, '"swname":"');
         config.base.imageDigest = ParserUtils.extractStringValue(rawPayload, '"image_digest":"');
+
+        // Create an empty bytes array
+        // eatNonceArray = new bytes[](5);
+
+        // Extract the eat_nonce array
+        eatNonceArray = ParserUtils.extractStringArray(rawPayload, '"eat_nonce":[');
     }
 
     /**
