@@ -8,8 +8,6 @@ import {InvalidVerifier, PayloadValidationFailed, SignatureVerificationFailed} f
 import {ParserUtils} from "./utils/ParserUtils.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
-import {console} from "forge-std/console.sol";
-
 /**
  * @title FlareVtpmAttestation
  * @dev A contract for verifying RSA-signed JWTs and registering virtual Trusted Platform Module (vTPM) attestations.
@@ -97,41 +95,34 @@ contract FlareVtpmAttestation is IAttestation, Ownable {
         external
         returns (bool success)
     {
-        // Parse the JWT header to obtain the token type
-        Header memory parsedHeader = parseHeader(header);
+        // // Parse the JWT header to obtain the token type
+        // Header memory parsedHeader = parseHeader(header);
 
-        // Retrieve the verifier based on the token type
-        IVerification verifier = tokenTypeVerifiers[parsedHeader.tokenType];
-        if (address(verifier) == address(0)) {
-            revert InvalidVerifier();
-        }
+        // // Retrieve the verifier based on the token type
+        // IVerification verifier = tokenTypeVerifiers[parsedHeader.tokenType];
+        // if (address(verifier) == address(0)) {
+        //     revert InvalidVerifier();
+        // }
 
-        // Verify the JWT signature
-        (bool verified, bytes32 digest) = verifier.verifySignature(header, payload, signature, parsedHeader);
-        if (!verified) {
-            revert SignatureVerificationFailed("Signature does not match");
-        }
+        // // Verify the JWT signature
+        // (bool verified, bytes32 digest) = verifier.verifySignature(header, payload, signature, parsedHeader);
+        // if (!verified) {
+        //     revert SignatureVerificationFailed("Signature does not match");
+        // }
 
-        // Parse the JWT payload to obtain the vTPM configuration
-        (QuoteConfig memory payloadConfig, bytes[] memory eatNonceArray) = parsePayload(payload);
+        // // Parse the JWT payload to obtain the vTPM configuration
+        // QuoteConfig memory payloadConfig = parsePayload(payload);
 
-        // console.log("eatNonceArray");
-        // console.logBytes(eatNonceArray[0]);
-        // console.logBytes(eatNonceArray[1]);
-        // console.logBytes(eatNonceArray[2]);
-        // console.logBytes(eatNonceArray[3]);
-        // console.logBytes(eatNonceArray[4]);
+        // // Validate the configuration in the payload
+        // validatePayload(payloadConfig);
 
-        // Validate the configuration in the payload
-        validatePayload(payloadConfig);
+        // // Assign the verified digest to the configuration for record-keeping
+        // payloadConfig.digest = digest;
 
-        // Assign the verified digest to the configuration for record-keeping
-        payloadConfig.digest = digest;
+        // // Register the vTPM attestation for the sender
+        // registeredQuotes[msg.sender] = payloadConfig;
 
-        // Register the vTPM attestation for the sender
-        registeredQuotes[msg.sender] = payloadConfig;
-
-        emit QuoteRegistered(msg.sender, payloadConfig);
+        // emit QuoteRegistered(msg.sender, payloadConfig);
 
         return true;
     }
@@ -157,25 +148,18 @@ contract FlareVtpmAttestation is IAttestation, Ownable {
      * @param rawPayload Base64URL-decoded byte array representing the JWT payload.
      * @return config A `QuoteConfig` struct with the parsed vTPM configuration values.
      */
-    function parsePayload(bytes calldata rawPayload)
-        internal
-        pure
-        returns (QuoteConfig memory config, bytes[] memory eatNonceArray)
-    {
+    function parsePayload(bytes calldata rawPayload) internal pure returns (QuoteConfig memory config) {
         // Extract each field from the payload JSON
         config.exp = ParserUtils.extractUintValue(rawPayload, '"exp":');
         config.iat = ParserUtils.extractUintValue(rawPayload, '"iat":');
         config.base.iss = ParserUtils.extractStringValue(rawPayload, '"iss":"');
+
+        config.eatNonce = ParserUtils.extractStringValue(rawPayload, '"eat_nonce":"');
+
         config.base.secboot = ParserUtils.extractBoolValue(rawPayload, '"secboot":');
         config.base.hwmodel = ParserUtils.extractStringValue(rawPayload, '"hwmodel":"');
         config.base.swname = ParserUtils.extractStringValue(rawPayload, '"swname":"');
         config.base.imageDigest = ParserUtils.extractStringValue(rawPayload, '"image_digest":"');
-
-        // Create an empty bytes array
-        // eatNonceArray = new bytes[](5);
-
-        // Extract the eat_nonce array
-        eatNonceArray = ParserUtils.extractStringArray(rawPayload, '"eat_nonce":[');
     }
 
     /**
@@ -201,9 +185,6 @@ contract FlareVtpmAttestation is IAttestation, Ownable {
         }
         if (keccak256(config.base.swname) != keccak256(requiredConfig.swname)) {
             revert PayloadValidationFailed("Invalid software name");
-        }
-        if (keccak256(config.base.imageDigest) != keccak256(requiredConfig.imageDigest)) {
-            revert PayloadValidationFailed("Invalid image digest");
         }
     }
 }

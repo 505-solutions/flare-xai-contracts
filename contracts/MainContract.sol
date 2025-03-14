@@ -4,11 +4,9 @@ pragma solidity ^0.8.20;
 import "./FlareVtpmAttestation.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-import {console} from "forge-std/console.sol";
+import "@openzeppelin/contracts/utils/Strings.sol";
 
 contract MainContract {
-    string public constant IMAGEDIGEST = "0x0000000000000000000000000000000000000000000000000000000000000000";
-
     FlareVtpmAttestation public attestationContract;
     IERC20 public wlfrToken;
     address public owner;
@@ -24,15 +22,26 @@ contract MainContract {
     event WalletActivated(address indexed walletAddress, uint256 amount);
     event RewardsDistributed(address[] rewardees, uint256[] rewards);
 
+    string public imageDigest;
+
     modifier onlyOwner() {
         require(msg.sender == owner, "Not the contract owner");
         _;
     }
 
-    constructor(address _attestationContract, address _wlfrToken) {
+    constructor(address _attestationContract, address _wlfrToken, string memory _imageDigest) {
         attestationContract = FlareVtpmAttestation(_attestationContract);
         wlfrToken = IERC20(_wlfrToken);
         owner = msg.sender;
+        imageDigest = _imageDigest;
+    }
+
+    function setImageDigest(string memory _imageDigest) external onlyOwner {
+        imageDigest = _imageDigest;
+    }
+
+    function setAttestationContract(address _attestationContract) external onlyOwner {
+        attestationContract = FlareVtpmAttestation(_attestationContract);
     }
 
     function registerWallet(uint256 amount) external {
@@ -44,16 +53,20 @@ contract MainContract {
         emit WalletRegistered(msg.sender, amount);
     }
 
-    function activateWallet(bytes calldata header, bytes calldata payload, bytes calldata signature) external {
+    function activateWallet(
+        bytes calldata header,
+        bytes calldata payload,
+        bytes calldata signature,
+        address walletAddress
+    ) external {
         require(walletRequests[msg.sender].depositAmount > 0, "No wallet request found");
 
         bool success = attestationContract.verifyAndAttest(header, payload, signature);
         require(success, "Attestation verification failed");
 
         QuoteConfig memory registeredConfig = attestationContract.getRegisteredQuote(address(this));
-        // require(registeredConfig.base.imageDigest == bytes(IMAGEDIGEST), "Invalid image digest");
 
-        address walletAddress = msg.sender; // Assuming the attestation provides the correct address
+        
         uint256 depositAmount = walletRequests[msg.sender].depositAmount;
 
         delete walletRequests[msg.sender];

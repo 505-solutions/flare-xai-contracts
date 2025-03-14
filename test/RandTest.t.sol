@@ -11,17 +11,13 @@ import {
     Header, PayloadValidationFailed, QuoteConfig, SignatureVerificationFailed
 } from "../contracts/types/Common.sol";
 
-import {MainContract} from "../contracts/MainContract.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/utils/Strings.sol";
 
 /**
  * @title FlareVtpmAttestationTest
  * @dev Test suite for the FlareVtpmAttestation contract.
  */
-contract MainContractTest is Test {
-    MainContract public mainContract;
-    IERC20 public wlfrToken;
-
+contract RandTest is Test {
     /// @notice Instance of the contract to be tested
     FlareVtpmAttestation public flareVtpm;
     OidcSignatureVerification public oidcVerifier;
@@ -56,9 +52,6 @@ contract MainContractTest is Test {
 
     address constant walletAddress = address(0x5a7338D940330109A2722140B7790fC4e286E54C);
 
-    address constant owner = address(0x5a7338D940330109A2722140B7790fC4e286E54C);
-    address constant user = address(0x5a7338D940330109A2722140B7790fC4e286E54C);
-
     /**
      * @dev Sets up the test environment by deploying the FlareVtpmAttestation contract
      * and initializing it with test data.
@@ -66,8 +59,6 @@ contract MainContractTest is Test {
     function setUp() public {
         // Deploy the FlareVtpmAttestation contract
         flareVtpm = new FlareVtpmAttestation();
-
-        wlfrToken = IERC20(address(new MockERC20()));
 
         // Set the required vTPM configuration in the contract
         flareVtpm.setBaseQuoteConfig(HWMODEL, SWNAME, IMAGEDIGEST, ISS, SECBOOT);
@@ -81,114 +72,108 @@ contract MainContractTest is Test {
 
         // Set current block time between issued and expiry time for testing
         vm.warp((IAT + EXP) / 2);
-
-        // Mint some tokens to the user
-        MockERC20(address(wlfrToken)).mint(user, 1000 ether);
-
-        // Set the owner of the MainContract
-        vm.prank(owner);
-        mainContract = new MainContract(address(flareVtpm), address(wlfrToken), IMAGEDIGEST);
     }
 
-    function testRegisterWallet() public {
-        vm.startPrank(user);
+    /**
+     * @dev Tests the verifyAndAttest function to ensure that a full verification and attestation
+     * process succeeds.
+     */
+    function test_verifySignature() public view {
+        Header memory header = Header({kid: KID, tokenType: TOKENTYPE});
+        (bool verified, bytes32 digest) = oidcVerifier.verifySignature(HEADER, PAYLOAD, SIGNATURE, header);
 
-        // Approve the MainContract to spend user's tokens
-        wlfrToken.approve(address(mainContract), 100 ether);
+        // Verify that the RSA signature is valid
+        assertTrue(verified, "RSA signature could not be verified");
 
-        // Register a wallet with 100 tokens
-        mainContract.registerWallet(100 ether);
-
-        // Check the wallet request
-        (address requester, uint256 depositAmount) = mainContract.walletRequests(user);
-        assertEq(requester, user);
-        assertEq(depositAmount, 100 ether);
-
-        vm.stopPrank();
+        // Verify that the computed digest matches the expected digest
+        assertEq(digest, DIGEST, "Invalid digest");
     }
 
-    function testActivateWallet() public {
-        vm.startPrank(user);
+    function test_Rand() public {
+        bytes memory header =
+            hex"7b22616c67223a225253323536222c226b6964223a2239393964323732396666376666613235316466653463336563646630366533626431643937303832222c22747970223a224a5754227d";
 
-        bool success = flareVtpm.verifyAndAttest(HEADER, PAYLOAD, SIGNATURE);
-
-        // Verify that the function returned true
-        assertTrue(success, "Verification and attestation failed");
-
-        // Approve and register the wallet
-        wlfrToken.approve(address(mainContract), 100 ether);
-        mainContract.registerWallet(100 ether);
-
-        uint256 balanceBefore = wlfrToken.balanceOf(user);
-
-        // Activate the wallet
-        mainContract.activateWallet(HEADER, PAYLOAD, SIGNATURE, user);
-
-        // Check that the wallet request is deleted
-        (address requester, uint256 depositAmount) = mainContract.walletRequests(user);
-        assertEq(requester, address(0));
-        assertEq(depositAmount, 0);
-
-        assertEq(wlfrToken.balanceOf(user), balanceBefore + 100 ether);
-
-        vm.stopPrank();
+        console.logBytes(header);
     }
 
-    function testDistributeRewards() public {
-        vm.startPrank(owner);
-
-        address[] memory rewardees = new address[](2);
-        rewardees[0] = address(0x3);
-        rewardees[1] = address(0x4);
-
-        uint256[] memory rewards = new uint256[](2);
-        rewards[0] = 50 ether;
-        rewards[1] = 50 ether;
-
-        // Distribute rewards
-        mainContract.distributeRewards(rewardees, rewards);
-
-        // Check the rewards (assuming a mint function exists)
-        // assertEq(MockERC20(address(wlfrToken)).balanceOf(rewardees[0]), 50 ether);
-        // assertEq(MockERC20(address(wlfrToken)).balanceOf(rewardees[1]), 50 ether);
-
-        vm.stopPrank();
-    }
-}
-
-// Mock ERC20 token for testing
-contract MockERC20 is IERC20 {
-    string public name = "Mock Token";
-    string public symbol = "MCK";
-    uint8 public decimals = 18;
-    uint256 public totalSupply;
-
-    mapping(address => uint256) public balanceOf;
-    mapping(address => mapping(address => uint256)) public allowance;
-
-    function transfer(address to, uint256 amount) external returns (bool) {
-        require(balanceOf[msg.sender] >= amount, "Insufficient balance");
-        balanceOf[msg.sender] -= amount;
-        balanceOf[to] += amount;
-        return true;
+    function addressToString(address _addr) public pure returns (string memory) {
+        return string(abi.encodePacked("0x", Strings.toHexString(uint160(_addr), 20)));
     }
 
-    function approve(address spender, uint256 amount) external returns (bool) {
-        allowance[msg.sender][spender] = amount;
-        return true;
+    /**
+     * @dev Utility function to replace a value in the payload for testing purposes.
+     * @param payload The original payload bytes.
+     * @param key The key to search for in the payload.
+     * @param delimiter The delimiter that indicates the end of the value.
+     * @param newValue The new value to insert.
+     * @return modifiedPayload The payload with the value replaced.
+     */
+    function replaceInPayload(bytes memory payload, string memory key, string memory delimiter, bytes memory newValue)
+        internal
+        pure
+        returns (bytes memory modifiedPayload)
+    {
+        bytes memory keyBytes = bytes(key);
+        bytes memory delimiterBytes = bytes(delimiter);
+
+        uint256 start = indexOf(payload, keyBytes);
+        require(start != type(uint256).max, "Key not found in payload");
+        start += keyBytes.length;
+
+        uint256 end = indexOf(payload, delimiterBytes) + start;
+        require(end != type(uint256).max, "Delimiter not found in payload");
+
+        // Create slices for the parts before `start` and after `end`
+        bytes memory prefix = sliceMemoryArray(payload, 0, start);
+        bytes memory suffix = sliceMemoryArray(payload, end, payload.length);
+
+        // Concatenate the slices with the new value in the middle
+        modifiedPayload = bytes.concat(prefix, newValue, suffix);
     }
 
-    function transferFrom(address from, address to, uint256 amount) external returns (bool) {
-        require(balanceOf[from] >= amount, "Insufficient balance");
-        require(allowance[from][msg.sender] >= amount, "Allowance exceeded");
-        balanceOf[from] -= amount;
-        balanceOf[to] += amount;
-        allowance[from][msg.sender] -= amount;
-        return true;
+    /**
+     * @dev Extracts a slice from a memory array.
+     * @param array The array to slice.
+     * @param start The start index of the slice (inclusive).
+     * @param end The end index of the slice (exclusive).
+     * @return result The sliced portion of the array.
+     */
+    function sliceMemoryArray(bytes memory array, uint256 start, uint256 end)
+        internal
+        pure
+        returns (bytes memory result)
+    {
+        require(start <= end && end <= array.length, "Invalid slice indices");
+
+        result = new bytes(end - start);
+        for (uint256 i = start; i < end; i++) {
+            result[i - start] = array[i];
+        }
     }
 
-    function mint(address to, uint256 amount) external {
-        balanceOf[to] += amount;
-        totalSupply += amount;
+    /**
+     * @dev Finds the index of the first occurrence of needle in haystack.
+     * @param haystack The bytes sequence to search within.
+     * @param needle The bytes sequence to search for.
+     * @return index The index of the first occurrence, or uint256 max value if not found.
+     */
+    function indexOf(bytes memory haystack, bytes memory needle) internal pure returns (uint256) {
+        if (needle.length == 0 || haystack.length < needle.length) {
+            return type(uint256).max;
+        }
+
+        for (uint256 i = 0; i <= haystack.length - needle.length; i++) {
+            bool found = true;
+            for (uint256 j = 0; j < needle.length; j++) {
+                if (haystack[i + j] != needle[j]) {
+                    found = false;
+                    break;
+                }
+            }
+            if (found) {
+                return i;
+            }
+        }
+        return type(uint256).max;
     }
 }

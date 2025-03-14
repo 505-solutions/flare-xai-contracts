@@ -6,6 +6,7 @@ from pprint import pprint
 
 from web3 import Web3
 
+
 from jwks import get_rsa_data_by_kid
 
 
@@ -79,6 +80,7 @@ def print_oidc_pub_key_inputs(header_json: dict) -> None:
     else:
         kid = header_json.get("kid")
         if kid:
+            print("KeyId: ", kid)
             e, n = get_rsa_data_by_kid(kid)
             print("----addOidcPubKey INPUTS----")
             print(f"kid:\n{kid}\n")
@@ -90,7 +92,7 @@ def print_oidc_pub_key_inputs(header_json: dict) -> None:
 
 
 if __name__ == "__main__":
-    raw_token = read_data(Path("data/oidc.txt"))
+    raw_token = read_data(Path("data/myoidc.txt"))
     header_b64, payload_b64, signature_b64 = extract_jwt_parts(raw_token)
 
     # Decode header and payload

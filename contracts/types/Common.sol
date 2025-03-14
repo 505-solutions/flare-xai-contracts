@@ -22,6 +22,7 @@ struct QuoteConfig {
     BaseQuoteConfig base;
     uint256 exp;
     uint256 iat;
+    bytes eatNonce;
 }
 
 // Custom reverts
